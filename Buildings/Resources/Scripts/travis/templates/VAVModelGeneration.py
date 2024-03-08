@@ -28,50 +28,98 @@ Details:
 """
 
 from s223ToMo import *
+from queryS223VAVBox import *
 
-MODELS = [
-    'Buildings.Templates.ZoneEquipment.Validation.VAVBoxCoolingOnly',
-    'Buildings.Templates.ZoneEquipment.Validation.VAVBoxReheat',
-]
+if __name__ == "__main__":
 
-# See docstring of `generate_combinations` function for the structure of MODIF_GRID.
-# Tested modifications should at least cover the options specified at:
-# https://github.com/lbl-srg/ctrl-flow-dev/blob/main/server/scripts/sequence-doc/src/version/Current%20G36%20Decisions/Guideline%2036-2021%20(mappings).csv
-MODIF_GRID = {
-    'Buildings.Templates.ZoneEquipment.Validation.VAVBoxCoolingOnly': dict(
-        VAVBox_1__ctl__have_occSen=[
-            'true',
-            'false',
-        ],
-        VAVBox_1__ctl__have_winSen=[
-            'true',
-            'false',
-        ],
-        VAVBox_1__ctl__have_CO2Sen=[
-            'true',
-            'false',
-        ],
-    ),
-}
-MODIF_GRID['Buildings.Templates.ZoneEquipment.Validation.VAVBoxReheat'] = {
-    **MODIF_GRID['Buildings.Templates.ZoneEquipment.Validation.VAVBoxCoolingOnly'],
-    **dict(
-        VAVBox_1__redeclare__coiHea=[
-            'Buildings.Templates.Components.Coils.WaterBasedHeating'
-            + '(typVal=Buildings.Templates.Components.Types.Valve.TwoWayModulating)',
-            'Buildings.Templates.Components.Coils.WaterBasedHeating'
-            + '(typVal=Buildings.Templates.Components.Types.Valve.ThreeWayModulating)',
-            'Buildings.Templates.Components.Coils.ElectricHeating',
-        ],
-    ),
-}
+    g = rdflib.Graph()
+    g.parse('vavBoxModel.ttl', format = 'ttl')
+    configurations = {}
+    vavs = getAllVavs(g)
+    for vav in vavs:
+        sensorsAndProperties = getAllPropertiesAndSensors(g, vav)
+        containsReheat = checkIfReheatCoilPresent(g, vav)
+        if containsReheat:
+            configurations[vav] = {
+                'reheat': True,
+                'sensors': sensorsAndProperties
+            }
+        else:
+             configurations[vav] = {
+                'reheat': False,
+                'sensors': sensorsAndProperties
+            }
 
-# See docstring of `prune_modifications` function for the structure of EXCLUDE.
-EXCLUDE = None
+    for vav in configurations:
+        config = configurations.get(vav)
+        reheat = config.get('reheat')
+        MODELS = []
+        model = ""
+        if reheat:
+            model = 'Buildings.Templates.ZoneEquipment.Validation.VAVBoxReheat'
+        else:
+             model = 'Buildings.Templates.ZoneEquipment.Validation.VAVBoxCoolingOnly'
+        MODELS.append(model)
+        
+        vavSensors = config.get('sensors')
+        MODIF_GRID = {model: {}}
+        for sensor in ['occupancy', 'window', 'CO2']:
+            if sensor == 'occupancy':
+                if sensor in vavSensors:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_occSen']=['true']
+                else:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_occSen']=['false']
+                    
+            if sensor == 'window':
+                if sensor in vavSensors:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_winSen']=['true']
+                else:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_winSen']=['false']
 
-# See docstring of `prune_modifications` function for the structure of REMOVE_MODIF.
-REMOVE_MODIF = None
+            if sensor == 'CO2':
+                if sensor in vavSensors:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_CO2Sen']=['true']
+                else:
+                    MODIF_GRID[model]['VAVBox_1__ctl__have_CO2Sen']=['false']
+                    
+        if reheat:
+            ## TODO: how to query these? 
+            MODIF_GRID[model]['VAVBox_1__redeclare__coiHea'] = ['Buildings.Templates.Components.Coils.WaterBasedHeating(typVal=Buildings.Templates.Components.Types.Valve.TwoWayModulating)']
 
 
-if __name__ == '__main__':
-    main(models=MODELS, modif_grid=MODIF_GRID, exclude=EXCLUDE, remove_modif=REMOVE_MODIF)
+        # See docstring of `prune_modifications` function for the structure of EXCLUDE.
+        EXCLUDE = None
+
+        # See docstring of `prune_modifications` function for the structure of REMOVE_MODIF.
+        REMOVE_MODIF = None
+
+        print(MODELS)
+        print(MODIF_GRID)
+        args = parse_args()
+        tool = args.tool.lower()
+
+
+        all_experiment_attributes = dict(
+            zip(MODELS, map(get_experiment_attributes, MODELS))
+        )
+        combinations = generate_combinations(models=MODELS, modif_grid=MODIF_GRID)
+
+        # Prune class modifications.
+        combinations = prune_modifications(
+            combinations=combinations,
+            exclude=EXCLUDE,
+            remove_modif=REMOVE_MODIF,
+            fraction_test_coverage=args.coverage,
+        )
+
+        if len(combinations) > 0:
+            # Simulate cases.
+            results = simulate_cases(
+                combinations,
+                simulator=tool,
+                all_experiment_attributes=all_experiment_attributes,
+                asy=False,
+            )
+
+        #main(models=MODELS, modif_grid=MODIF_GRID, exclude=EXCLUDE, remove_modif=REMOVE_MODIF)
+
