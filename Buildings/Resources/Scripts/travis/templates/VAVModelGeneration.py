@@ -49,11 +49,17 @@ if __name__ == "__main__":
     for vav in vavs:
         sensorsAndProperties = getAllPropertiesAndSensors(g, vav)
         containsReheat = checkIfReheatCoilPresent(g, vav)
+        electriReheatCoils = getElectricHeatingCoil(g, vav)
+        
         if containsReheat:
             configurations[vav] = {
                 'reheat': True,
                 'sensors': sensorsAndProperties
             }
+            if len(electriReheatCoils) > 0:
+                configurations[vav]['electricReheat'] = True
+            else:
+                configurations[vav]['electricReheat'] = False
         else:
              configurations[vav] = {
                 'reheat': False,
@@ -82,10 +88,12 @@ if __name__ == "__main__":
 
     for vav in configurations:
         config = configurations.get(vav)
-        reheat = config.get('reheat')        
+        reheat = config.get('reheat')
+        electriReheatCoil = config.get('electricReheat', False)
         vavName = vav.replace(':','_').replace('/','_')
         MODELS = []
         model = ""
+        
         if reheat:
             model = 'Buildings.Templates.ZoneEquipment.Validation.VAVBoxReheat'
         else:
@@ -114,9 +122,12 @@ if __name__ == "__main__":
                     MODIF_GRID[model]['VAVBox_1__ctl__have_CO2Sen']=['false']
                     
         if reheat:
-            ## TODO: how to query these? 
-            MODIF_GRID[model]['VAVBox_1__redeclare__coiHea'] = ['Buildings.Templates.Components.Coils.WaterBasedHeating(typVal=Buildings.Templates.Components.Types.Valve.TwoWayModulating)']
-
+            if electriReheatCoil:
+                MODIF_GRID[model]['VAVBox_1__redeclare__coiHea'] = ['Buildings.Templates.Components.Coils.ElectricHeating']
+            else:
+                ## TODO: how to check two way v/s three way
+                MODIF_GRID[model]['VAVBox_1__redeclare__coiHea'] = ['Buildings.Templates.Components.Coils.WaterBasedHeating(typVal=Buildings.Templates.Components.Types.Valve.TwoWayModulating)']
+        
         args = parse_args()
         tool = args.tool.lower()
 

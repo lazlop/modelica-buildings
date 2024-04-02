@@ -1,6 +1,7 @@
 import rdflib
 
 def getAllVavs(g):
+    s223NS = rdflib.Namespace('http://data.ashrae.org/standard223#')
     query = """
             SELECT DISTINCT ?vav
             WHERE {
@@ -14,6 +15,7 @@ def getAllVavs(g):
     return result
 
 def checkIfReheatCoilPresent(g, vav):
+    s223NS = rdflib.Namespace('http://data.ashrae.org/standard223#')
     query = """
             SELECT DISTINCT ?vav
             WHERE {
@@ -29,6 +31,25 @@ def checkIfReheatCoilPresent(g, vav):
             return True
     return False
 
+def getElectricHeatingCoil(g, vav):
+    s223NS = rdflib.Namespace('http://data.ashrae.org/standard223#')
+    g36 = rdflib.Namespace('http://data.ashrae.org/standard223/1.0/extensions/g36#')
+    g.bind("s223", s223NS)  # bind an RDFLib-provided namespace to a prefix
+    g.bind("g36", g36)
+    query = "SELECT  ?vav ?coil \n"+\
+            "WHERE { \n "+\
+            "    ?coil a s223:HeatingCoil . \n"+\
+            "    ?coil a g36:ElectricHeatingCoil . \n"+\
+            "    ?vav s223:contains ?coil . \n"+\
+            "    ?coil s223:hasRole ?role . \n"+\
+            "    FILTER regex(STR(?vav), \"{0}\") . \n".format(vav)+\
+            " }"
+    res = g.query(query)
+    result = []
+    for row in res:
+        if row[1] not in result:
+            result.append(row[1])
+    return result
 
 def getAllPropertiesAndSensors(g, inputVAV):
     s223NS = rdflib.Namespace('http://data.ashrae.org/standard223#')
