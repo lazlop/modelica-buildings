@@ -149,7 +149,6 @@ def simulate_case(arg, simulator, experiment_attributes):
     import tempfile
 
     simulator = simulator.lower()
-    print(simulator)
 
     if simulator == 'dymola':
         from buildingspy.simulate.Dymola import Simulator
@@ -339,7 +338,6 @@ def generate_combinations(models, modif_grid):
         combinations_dicts[model] = [
             dict(zip(keys, v)) for v in itertools.product(*values)
         ]
-        print(model)
 
     combinations = []
     tag = 0  # Simply tag each element with str(index).

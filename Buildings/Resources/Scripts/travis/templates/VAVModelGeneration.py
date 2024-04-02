@@ -29,13 +29,23 @@ Details:
 
 from s223ToMo import *
 from queryS223VAVBox import *
+from jinja2 import Environment, FileSystemLoader
+import os
+import yaml
 
 if __name__ == "__main__":
+    with open("config.yaml") as fp:
+        config = yaml.safe_load(fp)  
 
+    mblVersion = config.get('mblVersion', '10.0.0')
+    semanticModelFile = config.get('semanticModel')
+    templateFolder = config.get('templateFolder', 'moFileTemplates')
+    
     g = rdflib.Graph()
-    g.parse('vavBoxModel.ttl', format = 'ttl')
+    g.parse(semanticModelFile, format='ttl')
     configurations = {}
     vavs = getAllVavs(g)
+
     for vav in vavs:
         sensorsAndProperties = getAllPropertiesAndSensors(g, vav)
         containsReheat = checkIfReheatCoilPresent(g, vav)
@@ -50,9 +60,30 @@ if __name__ == "__main__":
                 'sensors': sensorsAndProperties
             }
 
+
+    environment = Environment(loader=FileSystemLoader(templateFolder))
+    packageTemplate = environment.get_template("packageTemplate.template")
+    vavTemplate = environment.get_template("VAVBoxTemplate.template")
+
+    packageName = semanticModelFile.split('.')[0]
+
+    packageMoText = packageTemplate.render(
+                packageName=packageName,
+                mblVersion=mblVersion
+            )
+
+    if not os.path.exists(packageName):
+        print("creating package directory for {0}".format(packageName))
+        os.mkdir(packageName)
+
+    with open(os.path.join(packageName, 'package.mo'), 'w') as fp:
+        print("creating package.mo")
+        fp.write(packageMoText)
+
     for vav in configurations:
         config = configurations.get(vav)
-        reheat = config.get('reheat')
+        reheat = config.get('reheat')        
+        vavName = vav.replace(':','_').replace('/','_')
         MODELS = []
         model = ""
         if reheat:
@@ -86,23 +117,16 @@ if __name__ == "__main__":
             ## TODO: how to query these? 
             MODIF_GRID[model]['VAVBox_1__redeclare__coiHea'] = ['Buildings.Templates.Components.Coils.WaterBasedHeating(typVal=Buildings.Templates.Components.Types.Valve.TwoWayModulating)']
 
-
-        # See docstring of `prune_modifications` function for the structure of EXCLUDE.
-        EXCLUDE = None
-
-        # See docstring of `prune_modifications` function for the structure of REMOVE_MODIF.
-        REMOVE_MODIF = None
-
-        print(MODELS)
-        print(MODIF_GRID)
         args = parse_args()
         tool = args.tool.lower()
-
 
         all_experiment_attributes = dict(
             zip(MODELS, map(get_experiment_attributes, MODELS))
         )
         combinations = generate_combinations(models=MODELS, modif_grid=MODIF_GRID)
+
+        EXCLUDE = None
+        REMOVE_MODIF = None
 
         # Prune class modifications.
         combinations = prune_modifications(
@@ -112,14 +136,40 @@ if __name__ == "__main__":
             fraction_test_coverage=args.coverage,
         )
 
-        if len(combinations) > 0:
-            # Simulate cases.
-            results = simulate_cases(
-                combinations,
-                simulator=tool,
-                all_experiment_attributes=all_experiment_attributes,
-                asy=False,
+        if len(combinations) == 1:
+            combination = combinations[0]
+            model = combination[0]
+            if 'VAVReheat' in model:
+                vavClass = 'Buildings.Templates.ZoneEquipment.VAVReheat'
+            else:
+                vavClass = 'Buildings.Templates.ZoneEquipment.VAVCoolingOnly'
+            
+            modifications = combination[1]
+            for mod in modifications:
+                modType = mod.split('VAVBox_1(')[1][:-1]
+                if modType.startswith('ctl'):
+                    controlMod = modType.split('have_')[1][:-1]
+                    flag = controlMod.split('=')[1]
+                    for sensor in ['occ', 'win', 'CO2']:
+                        if controlMod.startswith(sensor):
+                            if sensor == 'occ':
+                                occSensorFlag = flag
+                            if sensor == 'win':
+                                winSensorFlag = flag
+                            if sensor == 'CO2':
+                                co2SensorFlag = flag
+            reheatCoilType = 'as'
+            reheatCoilModification = '';
+            content = vavTemplate.render(
+                packageName=packageName,
+                vavName=vavName,
+                vavClass=vavClass,
+                occSensorFlag=occSensorFlag,
+                winSensorFlag=winSensorFlag,
+                co2SensorFlag=co2SensorFlag,
+                reheatCoilType=reheatCoilType,
+                reheatCoilModification=reheatCoilModification
             )
-
-        #main(models=MODELS, modif_grid=MODIF_GRID, exclude=EXCLUDE, remove_modif=REMOVE_MODIF)
-
+            print("creating modelica model for vav: {0}".format(vav))
+            with open(os.path.join(packageName, vavName+'.mo'), 'w') as fp:
+              fp.write(content)
