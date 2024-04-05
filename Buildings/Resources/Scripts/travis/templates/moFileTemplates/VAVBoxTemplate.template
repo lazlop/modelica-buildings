@@ -5,7 +5,7 @@ model {{ vavName }}
     redeclare Buildings.Templates.ZoneEquipment.Components.Controls.G36VAVBoxReheat ctl(
       have_occSen={{ occSensorFlag }},
       have_winSen={{ winSensorFlag }},
-      have_CO2Sen={{ co2SensorFlag }}),
-    redeclare {{ reheatCoilType }} coiHea{{ reheatCoilModification }};
+      have_CO2Sen={{ co2SensorFlag }}) {{ comma }}
+    {{ heaCoiRedeclaration }});
 
 end {{ vavName }};

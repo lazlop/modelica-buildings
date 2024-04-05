@@ -90,7 +90,7 @@ if __name__ == "__main__":
         config = configurations.get(vav)
         reheat = config.get('reheat')
         electriReheatCoil = config.get('electricReheat', False)
-        vavName = vav.replace(':','_').replace('/','_')
+        vavName = vav.replace(':', '_').replace('/', '_').replace('-', '_')
         MODELS = []
         model = ""
         
@@ -156,6 +156,8 @@ if __name__ == "__main__":
                 vavClass = 'Buildings.Templates.ZoneEquipment.VAVCoolingOnly'
             
             modifications = combination[1]
+            comma = ''
+            heaCoiRedeclaration = ''
             for mod in modifications:
                 modType = mod.split('VAVBox_1(')[1][:-1]
                 if modType.startswith('ctl'):
@@ -169,8 +171,12 @@ if __name__ == "__main__":
                                 winSensorFlag = flag
                             if sensor == 'CO2':
                                 co2SensorFlag = flag
-            reheatCoilType = 'as'
-            reheatCoilModification = '';
+                elif 'coiHea' in modType:
+                    comma = ','
+                    idxOfOpeningParanthesis = mod.index('(')
+                    idxOfClosingParanthesis = mod.rindex(')')
+                    heaCoiRedeclaration = mod[idxOfOpeningParanthesis+1:idxOfClosingParanthesis]
+                    print(heaCoiRedeclaration)
             content = vavTemplate.render(
                 packageName=packageName,
                 vavName=vavName,
@@ -178,8 +184,8 @@ if __name__ == "__main__":
                 occSensorFlag=occSensorFlag,
                 winSensorFlag=winSensorFlag,
                 co2SensorFlag=co2SensorFlag,
-                reheatCoilType=reheatCoilType,
-                reheatCoilModification=reheatCoilModification
+                comma=comma,
+                heaCoiRedeclaration=heaCoiRedeclaration
             )
             print("creating modelica model for vav: {0}".format(vav))
             with open(os.path.join(packageName, vavName+'.mo'), 'w') as fp:
