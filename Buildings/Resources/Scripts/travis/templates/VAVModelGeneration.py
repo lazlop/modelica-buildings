@@ -150,7 +150,7 @@ if __name__ == "__main__":
         if len(combinations) == 1:
             combination = combinations[0]
             model = combination[0]
-            if 'VAVReheat' in model:
+            if 'VAVBoxReheat' in model:
                 vavClass = 'Buildings.Templates.ZoneEquipment.VAVReheat'
             else:
                 vavClass = 'Buildings.Templates.ZoneEquipment.VAVCoolingOnly'
@@ -176,7 +176,6 @@ if __name__ == "__main__":
                     idxOfOpeningParanthesis = mod.index('(')
                     idxOfClosingParanthesis = mod.rindex(')')
                     heaCoiRedeclaration = mod[idxOfOpeningParanthesis+1:idxOfClosingParanthesis]
-                    print(heaCoiRedeclaration)
             content = vavTemplate.render(
                 packageName=packageName,
                 vavName=vavName,
